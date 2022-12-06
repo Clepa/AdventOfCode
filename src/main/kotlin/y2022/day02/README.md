@@ -1,3 +1,7 @@
+# Day 02
+
+⏱️⭐⭐: on time and both parts correct.
+
 ## Problem with answers
 
 ```text
