@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
-class SolutionTest {
+class Day05Test {
   private val input = listOf(
     "    [D]    ",
     "[N] [C]    ",

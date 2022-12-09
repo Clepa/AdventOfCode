@@ -8,7 +8,7 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import kotlin.test.assertEquals
 
-class SolutionTest {
+class Day06Test {
   @Nested
   inner class Part1 {
     private val inputs = listOf(

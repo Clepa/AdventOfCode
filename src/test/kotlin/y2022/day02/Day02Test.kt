@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
-class SolutionTest {
+class Day02Test {
   private val frequencyRounds = hashMapOf("A Y" to 1, "B X" to 1, "C Z" to 1)
 
   @Nested
