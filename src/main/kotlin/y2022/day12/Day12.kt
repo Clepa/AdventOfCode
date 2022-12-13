@@ -61,7 +61,7 @@ private data class Graph(val vertices: List<Vertex>) {
     while (!queue.isEmpty()) {
       val current = queue.removeFirst().apply { visited = true }
 
-      current.neighbours.filterNot { it.visited || it.queued }.firstOrNull {
+      current.neighbours.filterNot { it.visited || it.distance != Vertex.INITIAL_DISTANCE }.firstOrNull {
         it.distance = current.distance + 1
 
         if (foundCondition(it, end)) {
@@ -69,7 +69,6 @@ private data class Graph(val vertices: List<Vertex>) {
           queue.clear()
           true
         } else {
-          it.queued = true
           queue.addLast(it)
           false
         }
@@ -109,7 +108,12 @@ private data class Graph(val vertices: List<Vertex>) {
   }
 }
 
-private data class Vertex(val id: Int, val elevation: Char, var visited: Boolean = false, var distance: Int = 0) {
+private data class Vertex(
+  val id: Int, val elevation: Char, var visited: Boolean = false, var distance: Int = INITIAL_DISTANCE
+) {
   var neighbours: MutableList<Vertex> = mutableListOf()
-  var queued = false
+
+  companion object {
+    const val INITIAL_DISTANCE = 0
+  }
 }
