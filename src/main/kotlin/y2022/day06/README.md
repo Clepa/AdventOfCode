@@ -1,6 +1,6 @@
 # Day 06
 
-⏱️⭐⭐: on time and both parts correct.
+⏳⭐⭐: on time and both parts correct.
 
 The first part is implemented with a suboptimal one-liner that creates all the possible windows of 4 characters and step 1. The second part method is more optimal, as it only creates windows until the solution is found.
 

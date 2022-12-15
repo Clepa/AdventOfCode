@@ -1,6 +1,6 @@
 # Day 01
 
-⏱️⭐⭐: on time and both parts correct.
+⏳⭐⭐: on time and both parts correct.
 
 ## Problem with answers
 
