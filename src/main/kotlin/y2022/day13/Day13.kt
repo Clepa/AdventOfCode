@@ -6,37 +6,24 @@ import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
+import y2022.day13.Element.ElementInt
+import y2022.day13.Element.ElementList
 import kotlin.math.min
 
 fun main() {
   val input = java.io.File("src/main/kotlin/y2022/day13/input.txt").readLines()
 
   // Part 1.
-  val p1 = part1(input)
-  println(p1) // 6072.
-  if (p1 != 6072) throw Error("First part wrong result.") // TODO: delete.
+  println(part1(input)) // 6072.
 
   // Part 2.
-  val p2 = part2(input)
-  println(p2) // 22184.
-  if (p2 != 22184) throw Error("Second part wrong result.") // TODO: delete.
+  println(part2(input)) // 22184.
 }
 
 fun part1(input: List<String>): Int {
-  val pairs = input.windowed(2, 3).map { window -> Pair(decode(window[0]), decode(window[1])) }
+  val pairs = input.windowed(2, 3).map { Pair(decode(it[0]), decode(it[1])) }
 
-  //val inRightOrder = pairs.subList(83,84).mapIndexed { idx, pair ->
-  val inRightOrder = pairs.mapIndexed { idx, pair ->
-    println("--- ${idx + 1} pair ---\n\t${pair.first}\n\t${pair.second}")
-
-    val res = isPairInRightOrder(pair)
-
-    println(">>> $res")
-
-    if (res) idx + 1 else 0
-  }
-
-  println("Final:\n\t$inRightOrder")
+  val inRightOrder = pairs.mapIndexed { idx, pair -> if (pair.first.compareTo(pair.second) == -1) idx + 1 else 0 }
 
   return inRightOrder.sum()
 }
@@ -44,192 +31,156 @@ fun part1(input: List<String>): Int {
 fun part2(input: List<String>): Int {
   val pairs = input.windowed(2, 3).flatten().apply {
     (this as MutableList)
-    add("[[2]]")
-    add("[[6]]")
-  }.map { decode(it) }.sortedWith { o1, o2 -> comparePart2(Pair(o1, o2)) }
+    addAll(listOf("[[2]]", "[[6]]"))
+  }.map { decode(it) }
 
-  return (pairs.indexOf(decode("[[2]]")) + 1) * (pairs.indexOf(decode("[[6]]")) + 1)
+  val sorted = pairs.sortedWith { a, b -> a.compareTo(b) }
+
+  return (sorted.indexOf(decode("[[2]]")) + 1) * (sorted.indexOf(decode("[[6]]")) + 1)
 }
 
-private fun isPairInRightOrder(pair: Pair<List<Any>, List<Any>>): Boolean = start(pair) == OrderStatus.CORRECT_ORDER
+private fun decode(s: String): ElementList = Json.decodeFromString(ElementListSerializer, s)
 
-private fun comparePart2(pair: Pair<List<Any>, List<Any>>): Int {
-  return when (start(pair)) {
-    OrderStatus.CORRECT_ORDER -> -1
-    OrderStatus.INCORRECT_ORDER -> 1
-    OrderStatus.CONTINUE -> 0
+private object ElementListSerializer : KSerializer<ElementList> {
+  override val descriptor: SerialDescriptor get() = buildClassSerialDescriptor("ElementListSerializer")
+
+  override fun deserialize(decoder: Decoder): ElementList =
+    mapTo((decoder as JsonDecoder).decodeJsonElement()) as ElementList
+
+  override fun serialize(encoder: Encoder, value: ElementList) = TODO("Not implemented")
+
+  private fun mapTo(element: JsonElement): Element = when (element) {
+    is JsonArray -> ElementList(element.map(ElementListSerializer::mapTo))
+    is JsonPrimitive -> ElementInt(element.int)
+    else -> throw Error("""Unsupported type "${element::class}".""")
   }
 }
 
-private fun start(pair: Pair<List<Any>, List<Any>>): OrderStatus {
-  println("\t>>> start")
+// TODO: add Comparable<Element> and improve comparison code.
+sealed class Element {
+  data class ElementList(val value: List<Element>) : Element(), Iterable<Element>, Comparable<ElementList> {
+    override fun iterator(): Iterator<Element> = object : Iterator<Element> {
+      private val queue = ArrayDeque<ListIterator<Element>>()
 
-  val leftIterator = AnyListIterable(pair.first).iterator()
-  val rightIterator = AnyListIterable(pair.second).iterator()
-  var leftValue: Any
-  var rightValue: Any
+      init {
+        addIterator(value.listIterator())
+      }
 
-  if (!leftIterator.hasNext() || !rightIterator.hasNext()) {
-    leftValue = pair.first
-    rightValue = pair.second
-  } else {
-    leftValue = leftIterator.next()
-    rightValue = rightIterator.next()
-  }
+      override fun hasNext(): Boolean = queue.isNotEmpty()
 
-  println("\tInit: $leftValue ********* $rightValue ")
+      override fun next(): Element {
+        val currentIterator = currentIterator()
 
-  var res = compare(leftIterator, rightIterator, leftValue, rightValue)
+        val next = currentIterator.next()
+        if (!currentIterator.hasNext()) {
+          removeIterator()
+        }
 
-  if (res == OrderStatus.CONTINUE) {
-    if (leftIterator.hasNext() && !rightIterator.hasNext()) {
-      res = OrderStatus.INCORRECT_ORDER
-    } else if (!leftIterator.hasNext() && rightIterator.hasNext()) {
-      res = OrderStatus.CORRECT_ORDER
+        if (next is ElementList) {
+          addIterator(next.value.listIterator())
+        }
+
+        return next
+      }
+
+      private fun addIterator(iterator: ListIterator<Element>) {
+        if (iterator.hasNext()) {
+          queue.addLast(iterator)
+        }
+      }
+
+      private fun currentIterator() = queue.last()
+      private fun removeIterator() = queue.removeLast()
+    }
+
+    override fun compareTo(other: ElementList): Int {
+      val (leftIterator, rightIterator) = Pair(this.iterator(), other.iterator())
+      val res = compare(Pair(this, other), Pair(leftIterator, rightIterator))
+
+      return if (res != 0) res
+      else if (!leftIterator.hasNext() && rightIterator.hasNext()) -1
+      else if (leftIterator.hasNext() && !rightIterator.hasNext()) 1
+      else throw Error("Unexpected else branch.")
     }
   }
 
-  println("\tHasNexts: ${leftIterator.hasNext()} ### ${rightIterator.hasNext()}")
-  return res
+  data class ElementInt(val value: Int) : Element(), Comparable<ElementInt> {
+    override fun compareTo(other: ElementInt): Int = value.compareTo(other.value)
+  }
 }
 
 private fun compare(
-  leftIterator: Iterator<Any>, rightIterator: Iterator<Any>, leftValue: Any, rightValue: Any
-): OrderStatus {
-  println("\t\tRecursive $leftValue ********* $rightValue")
-  var res: OrderStatus = effectiveCompare(Pair(leftIterator, rightIterator), Pair(leftValue, rightValue))
+  pairValue: Pair<Element, Element>, pairIterator: Pair<Iterator<Element>, Iterator<Element>>
+): Int {
+  var res = effectiveCompare(pairValue, pairIterator)
 
-  while (leftIterator.hasNext() && rightIterator.hasNext() && res == OrderStatus.CONTINUE) {
-    val leftValue = leftIterator.next()
-    val rightValue = rightIterator.next()
-
-    println("\t\tWhile: $leftValue  ********* $rightValue")
-    res = effectiveCompare(Pair(leftIterator, rightIterator), Pair(leftValue, rightValue))
+  val (itLeft, itRight) = pairIterator
+  while (res == 0 && itLeft.hasNext() && itRight.hasNext()) {
+    res = effectiveCompare(Pair(itLeft.next(), itRight.next()), pairIterator)
   }
 
   return res
 }
 
-private fun effectiveCompare(pairIterator: Pair<Iterator<Any>, Iterator<Any>>, pair: Pair<Any, Any>): OrderStatus {
-  println("\t\t\tMethod compare: $pair")
-  val (left, right) = pair
-  val x = if (left is Int && right is Int) {
-    if (left < right) OrderStatus.CORRECT_ORDER else if (left > right) OrderStatus.INCORRECT_ORDER else OrderStatus.CONTINUE
-  } else if (left is List<*> && right is List<*>) {
-    if (left.isEmpty() && right.isNotEmpty()) {
-      OrderStatus.CORRECT_ORDER
-    } else if (left.isNotEmpty() && right.isEmpty()) {
-      OrderStatus.INCORRECT_ORDER
-    } else if (left.isEmpty() && right.isEmpty()) {
-      OrderStatus.CONTINUE
-    } else if (left.isNotEmpty() && right.isNotEmpty()) {
-      println("\t\t\t\tNotEmptyLists")
-      var i = 0
-      var res = OrderStatus.CONTINUE
-      while (i < min(left.size, right.size) && res == OrderStatus.CONTINUE) {
-        println("\t\t\t\t... i: $i")
-        if (left[i] is Int && right[i] is Int) {
-          val a = left[i] as Int
-          val b = right[i] as Int
-          res = if (a == b && left.size != right.size) {
-            println("\t\t\t\tDifferent sizes")
-            when (i) {
-              left.size - 1 -> OrderStatus.CORRECT_ORDER
-              right.size - 1 -> OrderStatus.INCORRECT_ORDER
-              else -> OrderStatus.CONTINUE
-            }
-          } else if (a < b) {
-            OrderStatus.CORRECT_ORDER
-          } else if (a > b) {
-            OrderStatus.INCORRECT_ORDER
-          } else {
-            OrderStatus.CONTINUE
-          }
-          println("\t\t\t\tPartial result: $res")
-        } else {
-          break
-        }
-        i++
-      }
-      println("\t\t\t\tresult: $res")
-      res
-    } else {
-      throw Error("Unreachable code.")
-    }
-  } else if ((left is Int && right is List<*>) || (left is List<*> && right is Int)) {
-    val l = if (left is Int) listOf(left) else left
-    val r = if (right is Int) listOf(right) else right
-    val itL = if (left is Int) AnyListIterable(l as List<Any>).iterator() else pairIterator.first
-    val itR = if (right is Int) AnyListIterable(r as List<Any>).iterator() else pairIterator.second
-    compare(itL, itR, l, r)
+private fun effectiveCompare(
+  pairValue: Pair<Element, Element>, pairIterator: Pair<Iterator<Element>, Iterator<Element>>
+): Int {
+  val (left, right) = pairValue
+  return if (left is ElementInt && right is ElementInt) {
+    left.compareTo(right)
+  } else if (left is ElementList && right is ElementList) {
+    effectiveCompareElementLists(pairValue as Pair<ElementList, ElementList>, pairIterator)
+  } else if (left is ElementInt && right is ElementList) {
+    compareElementIntWithElementList(left, right, pairIterator.second)
+  } else if (left is ElementList && right is ElementInt) {
+    -compareElementIntWithElementList(right, left, pairIterator.first)
   } else {
-    throw Error("Unexpected: $pair")
-  }
-  println("\t\t\tMethod compare result: $x")
-  return x
-}
-
-private fun mapIntToOrderStatus(value: Int) = when (value) {
-  -1 -> OrderStatus.INCORRECT_ORDER
-  1 -> OrderStatus.CORRECT_ORDER
-  else -> throw Error("Wrong OrderStatus")
-}
-
-private fun decode(s: String): List<Any> = Json.decodeFromString(InputSerializer, s) as List<Any>
-
-private object InputSerializer : KSerializer<Any> {
-  override val descriptor: SerialDescriptor get() = buildClassSerialDescriptor("InputSerializer")
-
-  override fun deserialize(decoder: Decoder): Any {
-    require(decoder is JsonDecoder)
-    return mapTo(decoder.decodeJsonElement())
-  }
-
-  override fun serialize(encoder: Encoder, value: Any) = TODO("Not yet implemented")
-
-  private fun mapTo(element: Any): Any {
-    return when (element) {
-      is JsonArray -> element.map { mapTo(it) }
-      is JsonPrimitive -> element.int
-      else -> throw Error("""Unsupported type "${element::class}"""")
-    }
+    throw Error("Unexpected: $pairValue.")
   }
 }
 
-// `list` can have elements of any type: numbers, strings, other lists,... All together.
-private class AnyListIterable(private val list: List<Any>) : Iterable<Any> {
-  override fun iterator() = object : Iterator<Any> {
-    private val queue = ArrayDeque<ListIterator<Any>>()
+private fun effectiveCompareElementLists(
+  pairValue: Pair<ElementList, ElementList>, pairIterator: Pair<Iterator<Element>, Iterator<Element>>
+): Int {
+  val (left, right) = pairValue
+  return if (left.value.isEmpty() && right.value.isNotEmpty()) {
+    -1
+  } else if (left.value.isNotEmpty() && right.value.isEmpty()) {
+    1
+  } else if (left.value.isEmpty()) {
+    0
+  } else {
+    // Iterate over two lists if both have items.
+    var res = 0
+    for (i in 0 until min(left.value.size, right.value.size)) {
+      val a = pairIterator.first.next()
+      val b = pairIterator.second.next()
 
-    init {
-      queue.add(list.listIterator())
-    }
-
-    override fun hasNext(): Boolean = queue.isNotEmpty() && currentIterator().hasNext() // TODO: is this condition
-    // correct?
-
-    override fun next(): Any {
-      val iterator = currentIterator()
-      val next = if (iterator.hasNext()) iterator.next() else throw Error("There are no more items.")
-
-      //if (!iterator.hasNext()) {
-      //  removeIterator()
-      //}
-
-      if (next is List<*>) {
-        addIterator(next.listIterator() as ListIterator<Any>)
-      }
-      while (queue.isNotEmpty() && !currentIterator().hasNext()) {
-        removeIterator()
+      res = if (a is ElementInt && b is ElementInt) {
+        if (a == b && left.value.size != right.value.size) {
+          when (i) {
+            left.value.size - 1 -> -1
+            right.value.size - 1 -> 1
+            else -> 0
+          }
+        } else {
+          a.compareTo(b)
+        }
+      } else {
+        effectiveCompare(Pair(a, b), pairIterator)
       }
 
-      return next
+      if (res != 0 || a !is ElementInt || b !is ElementInt) {
+        break
+      }
     }
-
-    private fun addIterator(iterator: ListIterator<Any>) = queue.addLast(iterator)
-    private fun currentIterator() = queue.last()
-    private fun removeIterator() = queue.removeLast()
+    res
   }
 }
 
-private enum class OrderStatus { CORRECT_ORDER, INCORRECT_ORDER, CONTINUE }
+private fun compareElementIntWithElementList(
+  elementLeft: ElementInt, elementRight: ElementList, elementRightIterator: Iterator<Element>
+): Int {
+  val left = ElementList(listOf(elementLeft))
+  return compare(Pair(left, elementRight), Pair(left.iterator(), elementRightIterator))
+}
